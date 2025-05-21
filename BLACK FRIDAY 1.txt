@@ -1,0 +1,612 @@
+# Black Friday Sales Prediction
+# An end-to-end machine learning project to predict customer purchase amounts
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from scipy import stats
+import warnings
+warnings.filterwarnings('ignore')
+
+# For preprocessing
+from sklearn.preprocessing import LabelEncoder, StandardScaler, OneHotEncoder
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+from sklearn.impute import SimpleImputer
+from sklearn.model_selection import train_test_split, cross_val_score, GridSearchCV
+
+# Models
+from sklearn.linear_model import LinearRegression, Ridge, Lasso
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor, ExtraTreesRegressor
+from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
+#import xgboost as XGBRegressor
+
+# Set random seed for reproducibility
+np.random.seed(42)
+
+print("# Black Friday Sales Prediction")
+print("================================================================")
+
+# Project Introduction
+print("\n## Project Introduction")
+print("This project aims to predict the purchase amount of customers during Black Friday sales.")
+print("Retailers can use these predictions to:")
+print("- Personalize promotions and offers")
+print("- Optimize inventory management")
+print("- Enhance the customer shopping experience")
+print("- Plan targeted marketing campaigns")
+
+# Load the dataset - Using try/except to handle potential missing file
+try:
+    print("\nLoading the Black Friday dataset...")
+    df = pd.read_csv('BlackFriday.csv')
+    print("Dataset loaded successfully!")
+except FileNotFoundError:
+    print("Dataset file not found. Creating sample data for demonstration.")
+    # Create a synthetic dataset with similar structure
+    n_samples = 1000
+    
+    # Generate sample data
+    user_ids = [f'U{i}' for i in range(1, 501)]
+    product_ids = [f'P{i}' for i in range(1, 201)]
+    
+    df = pd.DataFrame({
+        'User_ID': np.random.choice(user_ids, n_samples),
+        'Product_ID': np.random.choice(product_ids, n_samples),
+        'Gender': np.random.choice(['M', 'F'], n_samples),
+        'Age': np.random.choice(['0-17', '18-25', '26-35', '36-45', '46-50', '51-55', '55+'], n_samples),
+        'Occupation': np.random.randint(0, 21, n_samples),
+        'City_Category': np.random.choice(['A', 'B', 'C'], n_samples),
+        'Stay_In_Current_City_Years': np.random.choice(['0', '1', '2', '3', '4+'], n_samples),
+        'Marital_Status': np.random.randint(0, 2, n_samples),
+        'Product_Category_1': np.random.randint(1, 19, n_samples),
+        'Product_Category_2': np.random.choice([np.nan] + list(range(1, 19)), n_samples),
+        'Product_Category_3': np.random.choice([np.nan] + list(range(1, 19)), n_samples),
+        'Purchase': np.random.randint(100, 25000, n_samples)
+    })
+    print("Sample data created successfully!")
+
+# ================================================================
+# Dataset Description
+print("\n## Dataset Description")
+print(f"Dataset shape: {df.shape}")
+print("\nFirst 5 rows of the dataset:")
+print(df.head())
+
+print("\nDataset information:")
+print(df.info())
+
+# Check for null values
+print("\nNull values in each column:")
+print(df.isnull().sum())
+
+# Basic statistics of numerical features
+print("\nDescriptive statistics of numerical features:")
+print(df.describe())
+
+# ================================================================
+# EDA - Exploratory Data Analysis
+print("\n## EDA - Exploratory Data Analysis")
+
+# Distribution of Purchase amount
+plt.figure(figsize=(10, 6))
+sns.histplot(df['Purchase'], kde=True)
+plt.title('Distribution of Purchase Amount')
+plt.xlabel('Purchase Amount')
+plt.ylabel('Frequency')
+plt.savefig('purchase_distribution.png')
+plt.close()
+print("Purchase Amount Distribution plotted")
+
+# Gender-based analysis
+plt.figure(figsize=(12, 5))
+plt.subplot(1, 2, 1)
+sns.countplot(x='Gender', data=df)
+plt.title('Gender Distribution')
+
+plt.subplot(1, 2, 2)
+sns.boxplot(x='Gender', y='Purchase', data=df)
+plt.title('Purchase Amount by Gender')
+plt.tight_layout()
+plt.savefig('gender_analysis.png')
+plt.close()
+print("Gender-based analysis plotted")
+
+# Age-based analysis
+plt.figure(figsize=(14, 6))
+plt.subplot(1, 2, 1)
+sns.countplot(x='Age', data=df, order=df['Age'].value_counts().index)
+plt.title('Age Distribution')
+plt.xticks(rotation=45)
+
+plt.subplot(1, 2, 2)
+sns.boxplot(x='Age', y='Purchase', data=df)
+plt.title('Purchase Amount by Age')
+plt.xticks(rotation=45)
+plt.tight_layout()
+plt.savefig('age_analysis.png')
+plt.close()
+print("Age-based analysis plotted")
+
+# City Category analysis
+plt.figure(figsize=(12, 5))
+plt.subplot(1, 2, 1)
+sns.countplot(x='City_Category', data=df)
+plt.title('City Category Distribution')
+
+plt.subplot(1, 2, 2)
+sns.boxplot(x='City_Category', y='Purchase', data=df)
+plt.title('Purchase Amount by City Category')
+plt.tight_layout()
+plt.savefig('city_analysis.png')
+plt.close()
+print("City Category analysis plotted")
+
+# Stay In Current City Years analysis
+plt.figure(figsize=(12, 5))
+plt.subplot(1, 2, 1)
+sns.countplot(x='Stay_In_Current_City_Years', data=df)
+plt.title('Stay In Current City Years Distribution')
+
+plt.subplot(1, 2, 2)
+sns.boxplot(x='Stay_In_Current_City_Years', y='Purchase', data=df)
+plt.title('Purchase Amount by Stay In Current City Years')
+plt.tight_layout()
+plt.savefig('stay_years_analysis.png')
+plt.close()
+print("Stay In Current City Years analysis plotted")
+
+# Marital Status analysis
+plt.figure(figsize=(12, 5))
+plt.subplot(1, 2, 1)
+sns.countplot(x='Marital_Status', data=df)
+plt.title('Marital Status Distribution')
+plt.xticks([0, 1], ['Single', 'Married'])
+
+plt.subplot(1, 2, 2)
+sns.boxplot(x='Marital_Status', y='Purchase', data=df)
+plt.title('Purchase Amount by Marital Status')
+plt.xticks([0, 1], ['Single', 'Married'])
+plt.tight_layout()
+plt.savefig('marital_status_analysis.png')
+plt.close()
+print("Marital Status analysis plotted")
+
+# Product Category 1 analysis
+plt.figure(figsize=(15, 6))
+plt.subplot(1, 2, 1)
+sns.countplot(x='Product_Category_1', data=df)
+plt.title('Product Category 1 Distribution')
+
+plt.subplot(1, 2, 2)
+sns.boxplot(x='Product_Category_1', y='Purchase', data=df)
+plt.title('Purchase Amount by Product Category 1')
+plt.tight_layout()
+plt.savefig('product_category1_analysis.png')
+plt.close()
+print("Product Category 1 analysis plotted")
+
+# Correlation matrix for numerical features
+numerical_features = df.select_dtypes(include=['int64', 'float64']).columns
+plt.figure(figsize=(12, 8))
+correlation_matrix = df[numerical_features].corr()
+sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', linewidths=0.5)
+plt.title('Correlation Matrix of Numerical Features')
+plt.tight_layout()
+plt.savefig('correlation_matrix.png')
+plt.close()
+print("Correlation matrix plotted")
+
+# Analyzing Purchase amount by occupation
+plt.figure(figsize=(15, 6))
+sns.boxplot(x='Occupation', y='Purchase', data=df)
+plt.title('Purchase Amount by Occupation')
+plt.xticks(rotation=45)
+plt.tight_layout()
+plt.savefig('occupation_analysis.png')
+plt.close()
+print("Occupation analysis plotted")
+
+# ================================================================
+# Data Preprocessing and Feature Engineering
+print("\n## Data Preprocessing")
+
+# Function to calculate missing values by column
+def missing_values_table(df):
+    # Total missing values
+    mis_val = df.isnull().sum()
+    
+    # Percentage of missing values
+    mis_val_percent = 100 * mis_val / len(df)
+    
+    # Create a table with the results
+    mis_val_table = pd.concat([mis_val, mis_val_percent], axis=1)
+    
+    # Rename the columns
+    mis_val_table_ren_columns = mis_val_table.rename(
+        columns = {0 : 'Missing Values', 1 : '% of Total Values'})
+    
+    # Sort the table by percentage of missing descending
+    mis_val_table_ren_columns = mis_val_table_ren_columns[
+        mis_val_table_ren_columns.iloc[:,1] != 0].sort_values(
+        '% of Total Values', ascending=False).round(1)
+    
+    # Print some summary information
+    print(f"Your selected dataframe has {df.shape[1]} columns.")
+    print(f"There are {mis_val_table_ren_columns.shape[0]} columns that have missing values.")
+    
+    # Return the dataframe with missing information
+    return mis_val_table_ren_columns
+
+# Display missing values
+missing_values = missing_values_table(df)
+print("\nMissing Values Summary:")
+print(missing_values)
+
+# Handle missing values
+print("\nHandling missing values...")
+# Fill Product_Category_2 and Product_Category_3 with the most frequent value
+if df['Product_Category_2'].isnull().sum() > 0:
+    df['Product_Category_2'].fillna(df['Product_Category_2'].mode()[0], inplace=True)
+if df['Product_Category_3'].isnull().sum() > 0:
+    df['Product_Category_3'].fillna(df['Product_Category_3'].mode()[0], inplace=True)
+
+print("Missing values filled.")
+
+# Feature Engineering
+print("\nPerforming feature engineering...")
+
+# Convert 'Stay_In_Current_City_Years' to numeric by removing the '+' symbol
+df['Stay_In_Current_City_Years'] = df['Stay_In_Current_City_Years'].replace('4+', '4').astype(int)
+
+# Create dummy variables for categorical features
+print("Creating dummy variables for categorical features...")
+categorical_features = ['Gender', 'Age', 'City_Category']
+
+for feature in categorical_features:
+    df_dummies = pd.get_dummies(df[feature], prefix=feature, drop_first=True)
+    df = pd.concat([df, df_dummies], axis=1)
+    df.drop(feature, axis=1, inplace=True)
+
+print("Dummy variables created.")
+
+# Drop unnecessary columns
+print("Dropping User_ID and Product_ID columns...")
+df.drop(['User_ID', 'Product_ID'], axis=1, inplace=True)
+
+print("Data preprocessing complete.")
+
+# ================================================================
+# Split the data into features and target
+print("\n## Modeling Phase")
+X = df.drop('Purchase', axis=1)
+y = df['Purchase']
+
+# Split the data into training and testing sets
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+print(f"Training set size: {X_train.shape}")
+print(f"Testing set size: {X_test.shape}")
+
+# Function to evaluate models
+def evaluate_model(model, X_train, X_test, y_train, y_test):
+    # Train the model
+    model.fit(X_train, y_train)
+    
+    # Make predictions
+    y_pred = model.predict(X_test)
+    
+    # Calculate metrics
+    mse = mean_squared_error(y_test, y_pred)
+    rmse = np.sqrt(mse)
+    mae = mean_absolute_error(y_test, y_pred)
+    r2 = r2_score(y_test, y_pred)
+    
+    # Cross-validation score
+    cv_scores = cross_val_score(model, X_train, y_train, cv=5, scoring='neg_mean_squared_error')
+    cv_rmse = np.sqrt(-cv_scores.mean())
+    
+    return {
+        'MSE': mse,
+        'RMSE': rmse,
+        'MAE': mae,
+        'R-squared': r2,
+        'CV RMSE': cv_rmse
+    }
+
+# Train and evaluate multiple models
+print("\nTraining and evaluating models...")
+
+# Linear Regression
+lr = LinearRegression()
+lr_metrics = evaluate_model(lr, X_train, X_test, y_train, y_test)
+print("\nLinear Regression Performance:")
+for metric, value in lr_metrics.items():
+    print(f"{metric}: {value:.4f}")
+
+# Ridge Regression
+ridge = Ridge(alpha=1.0)
+ridge_metrics = evaluate_model(ridge, X_train, X_test, y_train, y_test)
+print("\nRidge Regression Performance:")
+for metric, value in ridge_metrics.items():
+    print(f"{metric}: {value:.4f}")
+
+# Lasso Regression
+lasso = Lasso(alpha=0.1)
+lasso_metrics = evaluate_model(lasso, X_train, X_test, y_train, y_test)
+print("\nLasso Regression Performance:")
+for metric, value in lasso_metrics.items():
+    print(f"{metric}: {value:.4f}")
+
+# Random Forest Regressor
+rf = RandomForestRegressor(n_estimators=100, random_state=42)
+rf_metrics = evaluate_model(rf, X_train, X_test, y_train, y_test)
+print("\nRandom Forest Regression Performance:")
+for metric, value in rf_metrics.items():
+    print(f"{metric}: {value:.4f}")
+
+# Gradient Boosting Regressor
+gb = GradientBoostingRegressor(n_estimators=100, random_state=42)
+gb_metrics = evaluate_model(gb, X_train, X_test, y_train, y_test)
+print("\nGradient Boosting Regression Performance:")
+for metric, value in gb_metrics.items():
+    print(f"{metric}: {value:.4f}")
+
+# Try XGBoost if available
+try:
+    xgb = XGBRegressor.XGBRegressor(n_estimators=100, random_state=42)
+    xgb_metrics = evaluate_model(xgb, X_train, X_test, y_train, y_test)
+    print("\nXGBoost Regression Performance:")
+    for metric, value in xgb_metrics.items():
+        print(f"{metric}: {value:.4f}")
+except:
+    print("\nXGBoost not available, skipping this model.")
+
+# Compare model performances
+
+
+print("\nComparing model performances...")
+models = ['Linear Regression', 'Ridge', 'Lasso', 'Random Forest', 'Gradient Boosting']
+metrics = [lr_metrics, ridge_metrics, lasso_metrics, rf_metrics, gb_metrics]
+
+try:
+    models.append('XGBoost')
+    metrics.append(xgb_metrics)
+except:
+    pass
+
+rmse_values = [m['RMSE'] for m in metrics]
+r2_values = [m['R-squared'] for m in metrics]
+
+# Plot RMSE comparison
+plt.figure(figsize=(12, 6))
+plt.subplot(1, 2, 1)
+sns.barplot(x=models, y=rmse_values)
+plt.title('RMSE Comparison')
+plt.xticks(rotation=45)
+plt.ylabel('RMSE (lower is better)')
+
+# Plot R-squared comparison
+plt.subplot(1, 2, 2)
+sns.barplot(x=models, y=r2_values)
+plt.title('R-squared Comparison')
+plt.xticks(rotation=45)
+plt.ylabel('R-squared (higher is better)')
+
+plt.tight_layout()
+plt.savefig('model_comparison.png')
+plt.close()
+print("Model comparison chart saved.")
+
+# Find the best model based on RMSE
+best_model_index = rmse_values.index(min(rmse_values))
+best_model_name = models[best_model_index]
+print(f"\nBest performing model: {best_model_name} with RMSE: {min(rmse_values):.4f}")
+
+# Feature Importance for the best model
+if best_model_name in ['Random Forest', 'Gradient Boosting', 'XGBoost']:
+    print("\nAnalyzing feature importance for the best model...")
+    
+    if best_model_name == 'Random Forest':
+        best_model = rf
+    elif best_model_name == 'Gradient Boosting':
+        best_model = gb
+    else:  # XGBoost
+        best_model = xgb
+    
+    # Get feature importances
+    importances = best_model.feature_importances_
+    feature_names = X_train.columns
+    
+    # Create a DataFrame for better visualization
+    feature_importance_df = pd.DataFrame({
+        'Feature': feature_names,
+        'Importance': importances
+    }).sort_values(by='Importance', ascending=False)
+    
+    print("\nTop 10 most important features:")
+    print(feature_importance_df.head(10))
+    
+    # Plot feature importances
+    plt.figure(figsize=(12, 8))
+    sns.barplot(x='Importance', y='Feature', data=feature_importance_df.head(15))
+    plt.title(f'Top 15 Feature Importances - {best_model_name}')
+    plt.tight_layout()
+    plt.savefig('feature_importance.png')
+    plt.close()
+    print("Feature importance chart saved.")
+
+# ================================================================
+# Hyperparameter Tuning for the best model
+print("\n## Hyperparameter Tuning")
+print(f"Performing hyperparameter tuning for {best_model_name}...")
+
+if best_model_name == 'Random Forest':
+    # Define the parameter grid
+    param_grid = {
+        'n_estimators': [50, 100, 200],
+        'max_depth': [None, 10, 20, 30],
+        'min_samples_split': [2, 5, 10],
+        'min_samples_leaf': [1, 2, 4]
+    }
+    
+    # Create the grid search
+    grid_search = GridSearchCV(
+        RandomForestRegressor(random_state=42),
+        param_grid=param_grid,
+        cv=3,
+        scoring='neg_mean_squared_error',
+        n_jobs=-1
+    )
+    
+elif best_model_name == 'Gradient Boosting':
+    # Define the parameter grid
+    param_grid = {
+        'n_estimators': [50, 100, 200],
+        'learning_rate': [0.01, 0.1, 0.2],
+        'max_depth': [3, 5, 7],
+        'min_samples_split': [2, 5, 10],
+        'min_samples_leaf': [1, 2, 4]
+    }
+    
+    # Create the grid search
+    grid_search = GridSearchCV(
+        GradientBoostingRegressor(random_state=42),
+        param_grid=param_grid,
+        cv=3,
+        scoring='neg_mean_squared_error',
+        n_jobs=-1
+    )
+    
+elif best_model_name == 'XGBoost':
+    # Define the parameter grid
+    param_grid = {
+        'n_estimators': [50, 100, 200],
+        'learning_rate': [0.01, 0.1, 0.2],
+        'max_depth': [3, 5, 7],
+        'subsample': [0.8, 0.9, 1.0],
+        'colsample_bytree': [0.8, 0.9, 1.0]
+    }
+    
+    # Create the grid search
+    grid_search = GridSearchCV(
+        XGBRegressor.XGBRegressor(random_state=42),
+        param_grid=param_grid,
+        cv=3,
+        scoring='neg_mean_squared_error',
+        n_jobs=-1
+    )
+    
+else:  # Linear models
+    print("Skipping hyperparameter tuning for linear models.")
+    grid_search = None
+
+# Run the grid search if applicable
+if grid_search is not None:
+    print("This may take some time...")
+    grid_search.fit(X_train, y_train)
+    
+    # Get the best parameters
+    print("\nBest parameters found:")
+    print(grid_search.best_params_)
+    
+    # Evaluate the tuned model
+    best_model = grid_search.best_estimator_
+    y_pred = best_model.predict(X_test)
+    
+    # Calculate metrics
+    mse = mean_squared_error(y_test, y_pred)
+    rmse = np.sqrt(mse)
+    mae = mean_absolute_error(y_test, y_pred)
+    r2 = r2_score(y_test, y_pred)
+    
+    print("\nTuned model performance:")
+    print(f"MSE: {mse:.4f}")
+    print(f"RMSE: {rmse:.4f}")
+    print(f"MAE: {mae:.4f}")
+    print(f"R-squared: {r2:.4f}")
+    
+    # Compare with the base model
+    original_rmse = min(rmse_values)
+    improvement = (original_rmse - rmse) / original_rmse * 100
+    print(f"\nImprovement over base model: {improvement:.2f}%")
+
+# ================================================================
+# Evaluation Metric
+print("\n## Evaluation Metric")
+print("The primary evaluation metrics for this regression problem are:")
+print("- Root Mean Squared Error (RMSE): Measures the standard deviation of the prediction errors")
+print("- Mean Absolute Error (MAE): Measures the average magnitude of errors in predictions")
+print("- R-squared: Indicates the proportion of variance in the dependent variable predictable from the independent variables")
+
+# Example: Show actual vs predicted values
+if grid_search is not None:
+    final_model = grid_search.best_estimator_
+elif best_model_name == 'Random Forest':
+    final_model = rf
+elif best_model_name == 'Gradient Boosting':
+    final_model = gb
+elif best_model_name == 'XGBoost':
+    try:
+        final_model = xgb
+    except:
+        final_model = gb
+else:
+    final_model = lr
+
+# Make predictions with the final model
+y_pred = final_model.predict(X_test)
+
+# Compare actual vs predicted
+plt.figure(figsize=(10, 6))
+plt.scatter(y_test, y_pred, alpha=0.5)
+plt.plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], 'k--')
+plt.xlabel('Actual')
+plt.ylabel('Predicted')
+plt.title('Actual vs Predicted Purchase Values')
+plt.tight_layout()
+plt.savefig('actual_vs_predicted.png')
+plt.close()
+print("Actual vs Predicted chart saved.")
+
+# Distribution of prediction errors
+errors = y_test - y_pred
+plt.figure(figsize=(10, 6))
+sns.histplot(errors, kde=True)
+plt.xlabel('Prediction Error')
+plt.ylabel('Frequency')
+plt.title('Distribution of Prediction Errors')
+plt.axvline(x=0, color='k', linestyle='--')
+plt.tight_layout()
+plt.savefig('error_distribution.png')
+plt.close()
+print("Error distribution chart saved.")
+
+# ================================================================
+# Conclusion
+print("\n## Conclusion")
+print("Key findings from the analysis:")
+print(f"1. The best performing model is {best_model_name}.")
+print(f"2. The model achieved an RMSE of {min(rmse_values):.4f} and R-squared of {max(r2_values):.4f}.")
+
+if best_model_name in ['Random Forest', 'Gradient Boosting', 'XGBoost']:
+    print("3. The most important features predicting purchase amount are:")
+    for i, row in feature_importance_df.head(5).iterrows():
+        print(f"   - {row['Feature']}: {row['Importance']:.4f}")
+
+print("\nBusiness recommendations:")
+print("1. Target marketing efforts based on the identified important customer segments.")
+print("2. Optimize product assortment based on categories that drive higher purchase values.")
+print("3. Develop personalized offers based on demographic factors that most influence spending.")
+print("4. Use the prediction model to forecast inventory needs for the next Black Friday.")
+print("5. Create segment-specific promotions to maximize revenue from each customer group.")
+
+print("\nFuture work:")
+print("1. Incorporate additional data like previous purchase history and loyalty information.")
+print("2. Implement a time-series analysis to understand buying patterns over time.")
+print("3. Develop a recommendation system based on the current purchase prediction model.")
+print("4. Test the model with real-time data during the next Black Friday sale.")
+print("5. Create an interactive dashboard for business users to leverage these insights.")
+
+print("\nIn conclusion, this predictive model can help retailers optimize their Black Friday sales strategies,")
+print("improve customer targeting, and ultimately increase revenue during this critical shopping period.")
